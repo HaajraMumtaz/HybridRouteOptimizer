@@ -1,0 +1,31 @@
+__pycache__
+.py[cod]
+$py.class
+
+# Virtual environment folder
+.venv
+
+# Distribution  packaging
+build
+dist
+.egg-info
+.env
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test  coverage reports
+.coverage
+.tox
+nosetests.xml
+coverage.xml
+.cover
+.hypothesis
+
+# IDE and editor files
+.vscode
+.idea
+.swp
+
+# Mac OS files
+.DS_Store
