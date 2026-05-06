@@ -29,3 +29,51 @@ coverage.xml
 
 # Mac OS files
 .DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Data files (large / generated)
+genetic-algo/data/*.graphml
+genetic-algo/data/*.geojson
+data/raw/
+data/processed/
+
+# Models
+models/*.cbm
+models/*.bin
+catboost_info/
+
+# Cache
+cache/
+*.cache
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

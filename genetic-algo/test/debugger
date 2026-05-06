@@ -1,0 +1,187 @@
+import osmnx as ox
+import geopandas as gpd
+import pandas as pd
+import os
+import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
+from shapely.validation import explain_validity
+
+print("=" * 60)
+print("🔍 FULL DIAGNOSTIC SCRIPT")
+print("=" * 60)
+
+# -----------------------------
+# 1. LOAD DATA
+# -----------------------------
+print("\n📥 Loading graph...")
+graph_path = os.path.join("genetic-algo", "data", "lahore_graph.graphml")
+G = ox.load_graphml(graph_path)
+
+print("📥 Loading zones...")
+zones_path = os.path.join("genetic-algo", "data", "lahore-zones-final.geojson")
+zones_gdf = gpd.read_file(zones_path)
+
+# -----------------------------
+# DIAG 1: RAW ZONE DATA
+# -----------------------------
+print("\n" + "=" * 60)
+print("DIAG 1: RAW ZONE DATA (before any processing)")
+print("=" * 60)
+print(f"CRS: {zones_gdf.crs}")
+print(f"Total zones: {len(zones_gdf)}")
+print(f"Columns: {zones_gdf.columns.tolist()}")
+print(f"Geometry types:\n{zones_gdf.geom_type.value_counts()}")
+print(f"Any null geometries: {zones_gdf.geometry.isna().sum()}")
+print(f"Any invalid geometries: {(~zones_gdf.is_valid).sum()}")
+invalid_zones = zones_gdf[~zones_gdf.is_valid]
+if len(invalid_zones) > 0:
+    print("Invalid zone details:")
+    for idx, row in invalid_zones.iterrows():
+        print(f"  zoneId={row.get('zoneId', idx)}: {explain_validity(row.geometry)}")
+print(f"Bounds: {zones_gdf.total_bounds}")
+
+# -----------------------------
+# PROCESS ZONES
+# -----------------------------
+if 'zoneId' not in zones_gdf.columns:
+    zones_gdf['zoneId'] = zones_gdf.index
+zones_gdf['zoneId'] = pd.to_numeric(zones_gdf['zoneId'], errors='coerce').fillna(0).astype(int)
+zones_gdf = zones_gdf.reset_index(drop=True)
+zones_gdf = zones_gdf[['zoneId', 'geometry']]
+
+# Fix invalid geometries
+zones_gdf['geometry'] = zones_gdf.geometry.buffer(0)
+print(f"\nAfter buffer(0) fix — invalid geometries: {(~zones_gdf.is_valid).sum()}")
+
+# -----------------------------
+# 2. PROJECT TO METRIC
+# -----------------------------
+metric_crs = "EPSG:32643"
+zones_gdf = zones_gdf.to_crs(metric_crs)
+edges = ox.graph_to_gdfs(G, nodes=False).reset_index()
+edges = edges.to_crs(metric_crs)
+
+# -----------------------------
+# DIAG 2: EDGES RAW
+# -----------------------------
+print("\n" + "=" * 60)
+print("DIAG 2: RAW EDGES (after projection)")
+print("=" * 60)
+print(f"Total edges: {len(edges)}")
+print(f"CRS: {edges.crs}")
+print(f"Geometry types:\n{edges.geom_type.value_counts()}")
+print(f"Any null geometries: {edges.geometry.isna().sum()}")
+print(f"Any invalid geometries: {(~edges.is_valid).sum()}")
+print(f"Edges bounds:  {edges.total_bounds}")
+print(f"Zones bounds:  {zones_gdf.total_bounds}")
+
+# Check overlap
+from shapely.geometry import box
+edges_box = box(*edges.total_bounds)
+zones_box = box(*zones_gdf.total_bounds)
+print(f"Bounds overlap: {edges_box.intersects(zones_box)}")
+
+# -----------------------------
+# DIAG 3: CORNER ANALYSIS
+# -----------------------------
+print("\n" + "=" * 60)
+print("DIAG 3: CORNER ZONE GEOMETRY ANALYSIS")
+print("=" * 60)
+
+# Get bounds
+minx, miny, maxx, maxy = zones_gdf.total_bounds
+x_thresh = minx + (maxx - minx) * 0.25  # left 25%
+y_top_thresh = maxy - (maxy - miny) * 0.15  # top 15%
+y_bot_thresh = miny + (maxy - miny) * 0.20  # bottom 20%
+
+# Identify corner zones by centroid
+zone_centroids = zones_gdf.copy()
+zone_centroids['cx'] = zones_gdf.geometry.centroid.x
+zone_centroids['cy'] = zones_gdf.geometry.centroid.y
+
+top_left_zones = zone_centroids[(zone_centroids['cx'] < x_thresh) & (zone_centroids['cy'] > y_top_thresh)]
+bot_left_zones = zone_centroids[(zone_centroids['cx'] < x_thresh) & (zone_centroids['cy'] < y_bot_thresh)]
+
+print(f"Top-left corner zones: {len(top_left_zones)}")
+print(top_left_zones[['zoneId', 'cx', 'cy']].to_string())
+print(f"\nBottom-left corner zones: {len(bot_left_zones)}")
+print(bot_left_zones[['zoneId', 'cx', 'cy']].to_string())
+
+# -----------------------------
+# 3. SPATIAL JOIN
+# -----------------------------
+print("\n" + "=" * 60)
+print("RUNNING SPATIAL JOIN...")
+print("=" * 60)
+joined = gpd.sjoin(edges, zones_gdf, how="left", predicate="intersects")
+joined = joined.drop_duplicates(subset=['u', 'v', 'key'])
+
+# -----------------------------
+# DIAG 4: POST-JOIN ANALYSIS
+# -----------------------------
+print("\n" + "=" * 60)
+print("DIAG 4: POST-JOIN ANALYSIS")
+print("=" * 60)
+total = len(joined)
+assigned_count = (joined['zoneId'].notna() & (joined['zoneId'] != 0)).sum()
+unassigned_count = joined['zoneId'].isna().sum()
+print(f"Total edges:  {total}")
+print(f"Assigned:     {assigned_count}")
+print(f"Unassigned:   {unassigned_count}")
+
+unassigned = joined[joined['zoneId'].isna() | (joined['zoneId'] == 0)]
+print(f"\nUnassigned geometry types:\n{unassigned.geom_type.value_counts()}")
+print(f"Unassigned bounds: {unassigned.total_bounds}")
+
+# -----------------------------
+# DIAG 5: MANUAL POINT-IN-POLY TEST ON CORNER EDGES
+# -----------------------------
+print("\n" + "=" * 60)
+print("DIAG 5: MANUAL POINT-IN-POLYGON TEST")
+print("=" * 60)
+
+# Take 10 unassigned edges, check which zones their centroid falls in
+sample_unassigned = unassigned.head(10).copy()
+sample_unassigned['centroid'] = sample_unassigned.geometry.centroid
+sample_unassigned_pts = sample_unassigned.set_geometry('centroid')
+
+manual_join = gpd.sjoin(sample_unassigned_pts[['u','v','key','centroid']], zones_gdf, how='left', predicate='within')
+print("Manual centroid-in-zone test (should show zoneId if truly inside a zone):")
+print(manual_join[['u','v','key','zoneId']].to_string())
+
+# -----------------------------
+# DIAG 6: BUFFER TEST
+# -----------------------------
+print("\n" + "=" * 60)
+print("DIAG 6: BUFFER TEST ON ZONES")
+print("=" * 60)
+
+for buf in [0, 100, 500, 1000, 2000, 5000]:
+    zones_buf = zones_gdf.copy()
+    zones_buf['geometry'] = zones_buf.geometry.buffer(buf)
+    test_join = gpd.sjoin(
+        unassigned[['u','v','key','geometry']].copy(),
+        zones_buf,
+        how='left',
+        predicate='intersects'
+    )
+    test_join = test_join.drop_duplicates(subset=['u','v','key'])
+    still_missing = test_join['zoneId'].isna().sum()
+    print(f"Buffer {buf:5}m → still unassigned: {still_missing}")
+
+# -----------------------------
+# DIAG 7: NEAREST DISTANCE TO ANY ZONE
+# -----------------------------
+print("\n" + "=" * 60)
+print("DIAG 7: NEAREST ZONE DISTANCE FOR SAMPLE UNASSIGNED EDGES")
+print("=" * 60)
+
+sample = unassigned[['u','v','key','geometry']].head(20).copy()
+sample_gdf = gpd.GeoDataFrame(sample, crs=metric_crs)
+nearest = gpd.sjoin_nearest(sample_gdf, zones_gdf, how='left', distance_col='dist_to_zone')
+nearest = nearest.drop_duplicates(subset=['u','v','key'])
+print(nearest[['u','v','key','zoneId','dist_to_zone']].to_string())
+
+print("\n" + "=" * 60)
+print("✅ DIAGNOSTIC COMPLETE")
+print("=" * 60)

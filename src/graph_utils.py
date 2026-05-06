@@ -1,11 +1,20 @@
 import osmnx as ox
 import matplotlib.pyplot as plt
-
+import os
 # 1. Fetch data
 city_name = "Lahore District, Punjab, Pakistan"
-graph = ox.graph_from_place(city_name, network_type='drive')
-nodes, edges = ox.graph_to_gdfs(graph)
+G = ox.graph_from_place(city_name, network_type='drive')
+
+data_dir = os.path.join("genetic-algo", "data")
+file_path = os.path.join(data_dir, "lahore_graph_new.graphml")
+
+nodes, edges = ox.graph_to_gdfs(G)
 city_boundary = ox.geocode_to_gdf(city_name)
+
+ox.save_graphml(G, filepath=file_path)
+
+print(f"✅ Graph saved successfully to: {os.path.abspath(file_path)}")
+print(f"📊 Stats: {len(G.nodes())} nodes and {len(G.edges())} edges.")
 
 # 2. Create the figure 
 def printhandshake():
@@ -31,6 +40,3 @@ def getBoundary():
     city_boundary = ox.geocode_to_gdf(city_name)
 
     city_boundary.to_file("lahore_boundary.geojson", driver='GeoJSON')
-
-
-getBoundary()
