@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AXIS [LHR] — Route Intake</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080a0f;
+  --surface:rgba(12,15,22,0.85);
+  --border:rgba(255,255,255,0.07);
+  --border-bright:rgba(255,255,255,0.13);
+  --text:#e8eaf0;
+  --text-2:rgba(232,234,240,0.55);
+  --text-3:rgba(232,234,240,0.28);
+  --accent:#00d4ff;
+  --accent-dim:rgba(0,212,255,0.08);
+  --green:#00e5a0;
+  --amber:#f59e0b;
+  --red:#f43f5e;
+  --violet:#a78bfa;
+  --mono:'IBM Plex Mono',monospace;
+  --sans:'Space Grotesk',sans-serif;
+  --r:8px;
+}
+html,body{height:100%;background:var(--bg);font-family:var(--sans);color:var(--text);overflow:hidden}
+
+/* ── VIDEO BG ── */
+#vbg{position:fixed;inset:0;z-index:0}
+#vbg video{width:100%;height:100%;object-fit:cover}
+#vbg::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(8,10,15,.92) 0%,rgba(8,10,15,.78) 60%,rgba(8,10,15,.96) 100%)}
+#vbg::before{content:'';position:absolute;inset:0;z-index:1;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.025) 2px,rgba(0,0,0,.025) 4px);pointer-events:none}
+.noise{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.02;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:128px}
+
+/* ── MAP GHOST — centered behind the card ── */
+#map-ghost{
+  position:fixed;
+  left:50%;top:50%;
+  transform:translate(-50%,-50%);
+  width:620px;height:560px;
+  z-index:1;
+  opacity:.15;
+  pointer-events:none;
+}
+#map-ghost svg{width:100%;height:100%}
+.lhr-fill{fill:rgba(0,212,255,0.06);transition:fill .6s}
+.lhr-fill.awake{fill:rgba(0,212,255,0.13)}
+.lhr-boundary{fill:none;stroke:rgba(0,212,255,0.42);stroke-width:1;stroke-linejoin:round;filter:drop-shadow(0 0 5px rgba(0,212,255,.5))}
+.grid-line{stroke:rgba(0,212,255,0.09);stroke-width:.4}
+
+/* ── HEADER ── */
+#hdr{position:fixed;top:0;left:0;right:0;z-index:20;padding:1.125rem 1.75rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:rgba(8,10,15,.6);backdrop-filter:blur(16px)}
+#logo{display:flex;align-items:center;gap:.625rem}
+#logo-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent),0 0 16px rgba(0,212,255,.35);animation:pulse 2.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.85)}}
+#logo-text{font-size:13px;font-weight:600;letter-spacing:.2em;color:var(--text)}
+#logo-sub{font-family:var(--mono);font-size:8px;color:var(--text-3);letter-spacing:.14em;margin-top:2px}
+#hdr-right{font-family:var(--mono);font-size:8px;color:var(--text-3);text-align:right;letter-spacing:.1em;line-height:1.8}
+#hdr-right span{color:var(--accent);opacity:.7}
+
+/* ── MAIN SHELL ── */
+#shell{
+  position:relative;z-index:10;
+  width:100%;height:100vh;
+  display:flex;align-items:center;justify-content:center;
+  padding:5rem 2rem 2rem;
+}
+
+/* ── CARD ── */
+#main-card{
+  width:100%;max-width:500px;
+  background:rgba(8,11,18,0.82);
+  border:1px solid var(--border-bright);
+  border-radius:16px;
+  backdrop-filter:blur(32px);-webkit-backdrop-filter:blur(32px);
+  box-shadow:0 32px 80px rgba(0,0,0,.7),0 0 0 1px rgba(0,212,255,.04),inset 0 1px 0 rgba(255,255,255,.05);
+  overflow:hidden;
+}
+.card-top-line{height:1px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.45}
+.card-hdr{padding:1.125rem 1.375rem .75rem;border-bottom:1px solid var(--border)}
+.card-hdr-label{font-family:var(--mono);font-size:8px;color:var(--text-3);letter-spacing:.18em;text-transform:uppercase;margin-bottom:.3rem}
+.card-hdr-title{font-size:17px;font-weight:600;color:var(--text);letter-spacing:-.01em}
+
+/* ── CARD BODY ── */
+.card-body{padding:.875rem 1.125rem}
+
+.input-group{display:flex;gap:.375rem;align-items:center;margin-bottom:.45rem;position:relative}
+.stop-input{
+  flex:1;height:38px;
+  border:1px solid var(--border);border-radius:var(--r);
+  padding:0 .875rem;
+  font-family:var(--sans);font-size:13px;color:var(--text);
+  background:rgba(255,255,255,.04);
+  outline:none;
+  transition:border-color .15s,box-shadow .15s,background .15s;
+}
+.stop-input:focus{border-color:rgba(0,212,255,.35);box-shadow:0 0 0 3px rgba(0,212,255,.06);background:rgba(0,212,255,.025)}
+.stop-input::placeholder{color:var(--text-3)}
+.stop-input.error{border-color:rgba(244,63,94,.4);box-shadow:0 0 0 3px rgba(244,63,94,.06)}
+.stop-input.resolving{border-color:rgba(0,212,255,.2)}
+.stop-input.resolved-ok{border-color:rgba(0,229,160,.4);box-shadow:0 0 0 3px rgba(0,229,160,.06)}
+
+/* resolve status chip sits inside the input visually */
+#resolve-status{
+  position:absolute;right:90px;top:50%;transform:translateY(-50%);
+  font-family:var(--mono);font-size:9px;
+  pointer-events:none;transition:opacity .2s;opacity:0;
+}
+#resolve-status.show{opacity:1}
+#resolve-status.pending{color:var(--text-3)}
+#resolve-status.ok{color:var(--green)}
+#resolve-status.fail{color:var(--red)}
+
+/* resolve preview bar */
+#resolve-preview{
+  display:none;align-items:center;gap:.4rem;
+  padding:.3rem .625rem;margin-bottom:.45rem;
+  background:rgba(0,229,160,.04);border:1px solid rgba(0,229,160,.14);
+  border-radius:6px;font-family:var(--mono);font-size:9px;
+  animation:slide-down .15s ease-out;
+}
+#resolve-preview.show{display:flex}
+#resolve-preview.fail{background:rgba(244,63,94,.04);border-color:rgba(244,63,94,.14)}
+.rp-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.rp-dot.ok{background:var(--green);box-shadow:0 0 5px var(--green)}
+.rp-dot.fail{background:var(--red);box-shadow:0 0 5px var(--red)}
+.rp-text{flex:1;color:var(--text-2)}
+.rp-coords{color:var(--text-3);margin-left:.25rem;font-size:8px}
+
+/* icon & add buttons */
+.icon-btn{
+  width:38px;height:38px;
+  border:1px solid var(--border);border-radius:var(--r);
+  background:rgba(255,255,255,.04);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;font-size:13px;color:var(--text-2);
+  transition:all .15s;flex-shrink:0;
+}
+.icon-btn:hover{border-color:rgba(0,212,255,.3);color:var(--accent);background:var(--accent-dim)}
+.icon-btn.active{border-color:rgba(0,212,255,.4);color:var(--accent);background:var(--accent-dim)}
+
+.add-btn{
+  width:38px;height:38px;border:none;border-radius:var(--r);
+  background:var(--accent);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;font-size:20px;font-weight:300;color:#000;
+  flex-shrink:0;transition:all .2s;
+  box-shadow:0 0 14px rgba(0,212,255,.22);
+}
+.add-btn:hover{background:#22deff;box-shadow:0 0 22px rgba(0,212,255,.45);transform:scale(1.04)}
+.add-btn:active{transform:scale(.97)}
+.add-btn:disabled{background:rgba(255,255,255,.07);color:var(--text-3);cursor:not-allowed;box-shadow:none;transform:none}
+
+/* deadline row */
+.deadline-row{
+  display:none;align-items:center;gap:.5rem;
+  padding:.45rem .75rem;margin-bottom:.45rem;
+  background:rgba(0,212,255,.04);border:1px solid rgba(0,212,255,.1);
+  border-radius:var(--r);animation:slide-down .18s ease-out;
+}
+@keyframes slide-down{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+.deadline-row.show{display:flex}
+.dl-label{font-family:var(--mono);font-size:10px;color:var(--text-3);flex:1;letter-spacing:.04em}
+.dl-input{border:none;background:transparent;font-family:var(--mono);font-size:12px;color:var(--text);outline:none;color-scheme:dark}
+.dl-close{font-size:10px;color:var(--accent);cursor:pointer;opacity:.6;padding:2px;transition:opacity .15s}
+.dl-close:hover{opacity:1}
+
+/* error / hint bar */
+#err-msg{
+  display:none;font-family:var(--mono);font-size:10px;color:var(--red);
+  padding:.3rem .5rem;margin-bottom:.45rem;
+  background:rgba(244,63,94,.06);border:1px solid rgba(244,63,94,.15);
+  border-radius:5px;letter-spacing:.03em;
+}
+#err-msg.show{display:block;animation:slide-down .18s ease-out}
+
+/* stop list */
+#stop-list{
+  max-height:200px;overflow-y:auto;margin-bottom:.625rem;
+  scrollbar-width:thin;scrollbar-color:rgba(0,212,255,.2) transparent;
+}
+#stop-list::-webkit-scrollbar{width:2px}
+#stop-list::-webkit-scrollbar-thumb{background:rgba(0,212,255,.2);border-radius:2px}
+
+.empty-list{
+  padding:1.75rem 1rem;text-align:center;
+  font-family:var(--mono);font-size:10px;color:var(--text-3);
+  letter-spacing:.06em;line-height:2;
+}
+.empty-icon{display:block;font-size:18px;opacity:.2;margin-bottom:.4rem}
+
+/* ticket */
+.ticket{
+  display:flex;align-items:center;gap:.5rem;
+  padding:.5rem .575rem;margin-bottom:.275rem;
+  background:rgba(255,255,255,.03);border:1px solid var(--border);
+  border-radius:var(--r);
+  animation:ticket-in .2s ease-out;
+  transition:border-color .15s;
+}
+.ticket:hover{border-color:var(--border-bright)}
+@keyframes ticket-in{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:translateX(0)}}
+.t-num{
+  font-family:var(--mono);font-size:9px;font-weight:500;
+  width:20px;height:20px;border-radius:4px;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;color:#000;box-shadow:0 0 6px rgba(0,212,255,.2);
+}
+.t-body{flex:1;min-width:0}
+.t-name{font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.t-meta{display:flex;gap:.3rem;margin-top:2px;flex-wrap:wrap}
+.badge{font-family:var(--mono);font-size:8px;padding:1px 5px;border-radius:3px;border:1px solid;letter-spacing:.02em}
+.bz{color:var(--violet);border-color:rgba(167,139,250,.2);background:rgba(167,139,250,.06)}
+.bd{color:var(--amber);border-color:rgba(245,158,11,.2);background:rgba(245,158,11,.06)}
+.bc{color:var(--text-3);border-color:var(--border);background:transparent}
+.t-rm{
+  width:18px;height:18px;border:none;background:none;
+  color:var(--text-3);cursor:pointer;font-size:14px;
+  border-radius:3px;display:flex;align-items:center;justify-content:center;
+  transition:all .15s;flex-shrink:0;
+}
+.t-rm:hover{color:var(--red);background:rgba(244,63,94,.1)}
+
+/* card footer */
+.card-footer{
+  padding:.75rem 1.125rem;border-top:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;gap:.5rem;
+}
+.stop-counter{font-family:var(--mono);font-size:9px;color:var(--text-3);letter-spacing:.06em}
+.stop-counter span{color:var(--accent)}
+.footer-actions{display:flex;gap:.375rem}
+.btn-ghost{
+  height:34px;padding:0 .75rem;
+  background:rgba(255,255,255,.04);border:1px solid var(--border);
+  border-radius:var(--r);color:var(--text-2);
+  font-family:var(--sans);font-size:12px;cursor:pointer;
+  transition:all .15s;white-space:nowrap;
+}
+.btn-ghost:hover{border-color:var(--border-bright);color:var(--text)}
+.btn-proceed{
+  height:34px;padding:0 1rem;
+  background:linear-gradient(135deg,rgba(0,212,255,.9),rgba(14,165,233,.85));
+  border:none;border-radius:var(--r);
+  color:#000;font-family:var(--sans);font-size:12px;font-weight:600;
+  cursor:pointer;letter-spacing:.04em;
+  transition:all .2s;
+  box-shadow:0 0 16px rgba(0,212,255,.18);white-space:nowrap;
+}
+.btn-proceed:hover:not(:disabled){background:linear-gradient(135deg,#00d4ff,#22deff);box-shadow:0 0 24px rgba(0,212,255,.4);transform:translateY(-1px)}
+.btn-proceed:active{transform:translateY(0)}
+.btn-proceed:disabled{background:rgba(255,255,255,.06);color:var(--text-3);cursor:not-allowed;box-shadow:none;transform:none}
+
+/* ── OPTIMIZING OVERLAY ── */
+#optimizing-overlay{
+  display:none;position:fixed;inset:0;z-index:50;
+  background:rgba(8,10,15,.88);backdrop-filter:blur(10px);
+  align-items:center;justify-content:center;flex-direction:column;gap:1rem;
+}
+#optimizing-overlay.show{display:flex;animation:fade-in .3s ease-out}
+@keyframes fade-in{from{opacity:0}to{opacity:1}}
+.opt-rings{position:relative;width:44px;height:44px}
+.opt-ring{position:absolute;inset:0;border-radius:50%;border:1px solid transparent}
+.opt-ring-1{border-top-color:var(--accent);animation:spin .9s linear infinite}
+.opt-ring-2{border-top-color:var(--violet);animation:spin 1.3s linear infinite reverse;inset:6px}
+.opt-ring-3{border-top-color:var(--green);animation:spin 1.7s linear infinite;inset:12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.opt-label{font-family:var(--mono);font-size:11px;color:var(--text-2);letter-spacing:.14em;text-transform:uppercase}
+.opt-sub{font-family:var(--mono);font-size:9px;color:var(--text-3);letter-spacing:.08em}
+
+/* ── EXIT VEIL ── */
+#exit-veil{position:fixed;inset:0;z-index:100;background:var(--bg);opacity:0;pointer-events:none;transition:opacity .55s cubic-bezier(.4,0,.2,1)}
+#exit-veil.show{opacity:1;pointer-events:all}
+
+/* ── COORD BAR ── */
+#coord-bar{position:fixed;bottom:1.125rem;left:1.5rem;z-index:20;font-family:var(--mono);font-size:8px;color:var(--text-3);letter-spacing:.1em;background:rgba(12,15,22,.7);padding:.3rem .55rem;border-radius:5px;border:1px solid var(--border);backdrop-filter:blur(8px)}
+</style>
+</head>
+<body>
+
+<div id="vbg">
+  <video autoplay loop muted playsinline>
+    <source src="C\Users\DELL\Downloads\739b57a664e2896dcebe22e94781341c" type="video/mp4"/>
+  </video>
+</div>
+<div class="noise"></div>
+
+<!-- MAP GHOST — centered, larger -->
+<div id="map-ghost">
+  <svg viewBox="0 0 660 600" preserveAspectRatio="xMidYMid slice">
+    <line class="grid-line" x1="0" y1="150" x2="660" y2="150"/>
+    <line class="grid-line" x1="0" y1="300" x2="660" y2="300"/>
+    <line class="grid-line" x1="0" y1="450" x2="660" y2="450"/>
+    <line class="grid-line" x1="165" y1="0" x2="165" y2="600"/>
+    <line class="grid-line" x1="330" y1="0" x2="330" y2="600"/>
+    <line class="grid-line" x1="495" y1="0" x2="495" y2="600"/>
+    <path class="lhr-fill" id="fill-path" d="M20.0,379.48 L39.12,415.38 L37.74,433.78 L50.18,446.53 L65.67,458.57 L69.92,467.22 L81.23,465.17 L89.6,457.11 L99.63,471.59 L100.76,485.21 L104.05,501.39 L116.87,487.18 L122.1,478.16 L123.73,468.84 L129.91,460.42 L142.51,463.24 L150.5,470.5 L155.29,480.09 L161.67,477.8 L161.85,484.35 L166.12,494.77 L160.73,506.36 L158.09,510.77 L162.12,514.9 L159.42,522.51 L154.39,524.35 L164.53,531.81 L175.78,538.16 L178.28,535.12 L192.71,529.72 L202.87,528.47 L211.66,515.49 L218.84,509.7 L227.1,502.13 L241.93,495.23 L244.47,486.49 L268.27,473.07 L318.69,477.86 L341.27,482.53 L368.16,475.02 L385.82,469.33 L400.83,464.09 L395.64,471.52 L396.6,477.22 L394.88,486.78 L394.75,492.42 L409.87,496.73 L415.26,487.02 L421.42,474.56 L420.98,458.2 L421.09,448.64 L423.68,427.64 L432.1,408.69 L446.61,385.65 L459.7,374.38 L481.22,389.75 L507.56,381.6 L525.18,383.71 L525.48,381.67 L523.27,378.96 L524.13,376.36 L525.49,372.95 L528.36,371.46 L531.77,369.91 L534.8,368.64 L537.77,366.62 L541.92,366.18 L543.77,364.71 L546.77,363.69 L549.49,361.76 L554.07,359.09 L556.47,353.13 L556.82,346.96 L556.94,342.96 L557.79,339.6 L560.61,336.93 L562.15,332.43 L564.0,328.96 L564.54,326.19 L566.04,323.27 L569.0,321.81 L571.91,321.23 L571.68,319.32 L572.07,317.01 L574.41,317.48 L577.5,314.65 L580.95,315.3 L584.82,316.93 L588.2,314.69 L589.26,311.02 L591.82,307.57 L595.47,309.61 L598.6,312.73 L599.39,315.65 L599.92,317.03 L602.58,318.75 L605.68,320.54 L608.43,321.47 L610.01,320.26 L611.66,318.63 L614.1,313.71 L617.48,311.0 L619.47,310.23 L618.33,308.99 L615.21,306.1 L613.39,304.0 L611.71,302.43 L609.23,299.76 L607.32,297.12 L605.85,295.73 L605.76,290.76 L607.75,288.14 L611.08,286.17 L614.44,285.29 L618.17,283.22 L618.26,280.92 L616.03,277.0 L615.15,274.67 L613.61,271.4 L611.47,269.23 L609.65,267.59 L606.59,265.23 L605.0,263.96 L603.83,261.32 L602.77,259.7 L601.39,259.1 L599.39,258.98 L598.21,260.17 L596.24,260.04 L595.61,258.92 L596.14,255.56 L597.01,252.55 L597.97,254.35 L599.32,254.66 L601.04,252.92 L602.63,252.4 L602.82,251.64 L600.86,251.19 L599.3,250.12 L596.98,250.18 L594.42,251.05 L592.73,252.38 L591.27,253.32 L590.26,254.19 L590.0,252.23 L586.73,251.57 L583.68,248.7 L582.28,245.78 L582.12,242.48 L580.3,238.5 L577.77,236.74 L575.7,236.68 L573.16,237.42 L572.26,235.94 L569.37,236.72 L567.61,235.4 L564.23,235.74 L564.35,238.34 L560.44,239.57 L557.71,240.38 L554.21,239.66 L551.99,238.58 L549.64,238.0 L547.07,235.98 L546.74,234.81 L549.6,235.72 L550.3,235.91 L551.98,237.65 L554.05,235.61 L557.01,233.49 L554.6,230.66 L551.9,229.53 L551.78,228.3 L553.99,229.73 L553.82,227.8 L554.06,225.93 L551.99,225.2 L551.73,224.41 L553.42,222.44 L553.39,219.77 L555.23,215.34 L558.22,214.66 L560.64,213.67 L562.49,212.82 L564.0,211.47 L567.64,210.68 L572.91,212.12 L577.29,209.48 L581.27,208.77 L580.78,205.13 L582.08,201.78 L582.31,199.81 L581.46,195.21 L582.09,192.6 L583.3,189.9 L582.77,185.97 L585.14,184.48 L585.15,182.53 L584.69,178.76 L580.44,177.1 L578.83,175.17 L577.52,174.12 L575.78,172.54 L576.04,171.45 L577.39,169.79 L578.61,168.73 L581.9,168.54 L584.08,166.4 L580.09,168.5 L578.28,166.76 L576.11,165.5 L570.95,162.71 L564.66,161.85 L562.09,159.86 L559.25,156.16 L555.79,153.9 L556.12,150.98 L554.33,149.69 L551.77,148.06 L552.39,146.29 L552.11,144.19 L551.75,142.1 L550.33,140.26 L547.62,139.32 L546.15,136.42 L548.16,136.37 L548.7,134.72 L546.78,133.34 L546.62,130.98 L544.73,131.08 L544.46,130.31 L543.35,129.2 L540.8,128.34 L536.64,127.66 L532.11,127.65 L528.26,126.38 L528.04,121.14 L524.43,117.31 L524.8,113.86 L524.18,110.07 L521.19,103.26 L519.73,101.18 L520.06,98.19 L521.24,93.53 L519.83,88.51 L517.62,86.39 L514.67,86.91 L512.67,85.11 L511.64,81.57 L511.58,79.38 L512.1,77.66 L513.83,75.33 L510.39,71.32 L505.12,67.94 L503.64,67.2 L503.97,65.11 L507.98,60.86 L508.34,58.92 L508.82,56.05 L506.93,55.09 L505.74,52.44 L502.19,50.57 L500.45,48.29 L499.24,46.86 L494.77,45.94 L492.34,45.07 L489.78,43.44 L484.56,40.96 L480.26,38.81 L478.89,37.68 L479.39,34.79 L479.46,31.98 L476.67,25.76 L472.01,22.22 L467.04,20.01 L441.06,35.21 L437.03,43.06 L419.56,41.1 L427.72,57.8 L402.07,85.75 L390.89,94.06 L369.3,73.61 L355.06,64.15 L332.55,85.69 L324.28,101.34 L310.63,98.74 L300.32,91.72 L296.5,84.72 L287.78,82.68 L285.33,85.57 L283.07,87.61 L278.24,85.74 L274.58,89.94 L274.66,94.46 L271.96,99.11 L270.49,103.48 L268.16,107.81 L259.38,108.05 L260.43,117.74 L255.04,121.72 L252.96,129.49 L252.3,136.5 L246.06,131.38 L239.76,131.72 L236.78,138.94 L238.65,143.17 L243.54,147.8 L243.07,167.13 L226.45,179.1 L214.41,192.71 L204.06,205.78 L187.91,222.58 L184.26,235.66 L183.05,252.46 L175.84,272.75 L148.1,290.53 L136.91,310.82 L129.75,295.13 L114.07,278.95 L98.39,303.47 L82.71,321.12 L89.88,336.32 L83.61,355.94 L68.83,368.2 L42.11,372.0 L26.76,370.16 Z"/>
+    <path class="lhr-boundary" d="M20.0,379.48 L39.12,415.38 L37.74,433.78 L50.18,446.53 L65.67,458.57 L69.92,467.22 L81.23,465.17 L89.6,457.11 L99.63,471.59 L100.76,485.21 L104.05,501.39 L116.87,487.18 L122.1,478.16 L123.73,468.84 L129.91,460.42 L142.51,463.24 L150.5,470.5 L155.29,480.09 L161.67,477.8 L161.85,484.35 L166.12,494.77 L160.73,506.36 L158.09,510.77 L162.12,514.9 L159.42,522.51 L154.39,524.35 L164.53,531.81 L175.78,538.16 L178.28,535.12 L192.71,529.72 L202.87,528.47 L211.66,515.49 L218.84,509.7 L227.1,502.13 L241.93,495.23 L244.47,486.49 L268.27,473.07 L318.69,477.86 L341.27,482.53 L368.16,475.02 L385.82,469.33 L400.83,464.09 L395.64,471.52 L396.6,477.22 L394.88,486.78 L394.75,492.42 L409.87,496.73 L415.26,487.02 L421.42,474.56 L420.98,458.2 L421.09,448.64 L423.68,427.64 L432.1,408.69 L446.61,385.65 L459.7,374.38 L481.22,389.75 L507.56,381.6 L525.18,383.71 L525.48,381.67 L523.27,378.96 L524.13,376.36 L525.49,372.95 L528.36,371.46 L531.77,369.91 L534.8,368.64 L537.77,366.62 L541.92,366.18 L543.77,364.71 L546.77,363.69 L549.49,361.76 L554.07,359.09 L556.47,353.13 L556.82,346.96 L556.94,342.96 L557.79,339.6 L560.61,336.93 L562.15,332.43 L564.0,328.96 L564.54,326.19 L566.04,323.27 L569.0,321.81 L571.91,321.23 L571.68,319.32 L572.07,317.01 L574.41,317.48 L577.5,314.65 L580.95,315.3 L584.82,316.93 L588.2,314.69 L589.26,311.02 L591.82,307.57 L595.47,309.61 L598.6,312.73 L599.39,315.65 L599.92,317.03 L602.58,318.75 L605.68,320.54 L608.43,321.47 L610.01,320.26 L611.66,318.63 L614.1,313.71 L617.48,311.0 L619.47,310.23 L618.33,308.99 L615.21,306.1 L613.39,304.0 L611.71,302.43 L609.23,299.76 L607.32,297.12 L605.85,295.73 L605.76,290.76 L607.75,288.14 L611.08,286.17 L614.44,285.29 L618.17,283.22 L618.26,280.92 L616.03,277.0 L615.15,274.67 L613.61,271.4 L611.47,269.23 L609.65,267.59 L606.59,265.23 L605.0,263.96 L603.83,261.32 L602.77,259.7 L601.39,259.1 L599.39,258.98 L598.21,260.17 L596.24,260.04 L595.61,258.92 L596.14,255.56 L597.01,252.55 L597.97,254.35 L599.32,254.66 L601.04,252.92 L602.63,252.4 L602.82,251.64 L600.86,251.19 L599.3,250.12 L596.98,250.18 L594.42,251.05 L592.73,252.38 L591.27,253.32 L590.26,254.19 L590.0,252.23 L586.73,251.57 L583.68,248.7 L582.28,245.78 L582.12,242.48 L580.3,238.5 L577.77,236.74 L575.7,236.68 L573.16,237.42 L572.26,235.94 L569.37,236.72 L567.61,235.4 L564.23,235.74 L564.35,238.34 L560.44,239.57 L557.71,240.38 L554.21,239.66 L551.99,238.58 L549.64,238.0 L547.07,235.98 L546.74,234.81 L549.6,235.72 L550.3,235.91 L551.98,237.65 L554.05,235.61 L557.01,233.49 L554.6,230.66 L551.9,229.53 L551.78,228.3 L553.99,229.73 L553.82,227.8 L554.06,225.93 L551.99,225.2 L551.73,224.41 L553.42,222.44 L553.39,219.77 L555.23,215.34 L558.22,214.66 L560.64,213.67 L562.49,212.82 L564.0,211.47 L567.64,210.68 L572.91,212.12 L577.29,209.48 L581.27,208.77 L580.78,205.13 L582.08,201.78 L582.31,199.81 L581.46,195.21 L582.09,192.6 L583.3,189.9 L582.77,185.97 L585.14,184.48 L585.15,182.53 L584.69,178.76 L580.44,177.1 L578.83,175.17 L577.52,174.12 L575.78,172.54 L576.04,171.45 L577.39,169.79 L578.61,168.73 L581.9,168.54 L584.08,166.4 L580.09,168.5 L578.28,166.76 L576.11,165.5 L570.95,162.71 L564.66,161.85 L562.09,159.86 L559.25,156.16 L555.79,153.9 L556.12,150.98 L554.33,149.69 L551.77,148.06 L552.39,146.29 L552.11,144.19 L551.75,142.1 L550.33,140.26 L547.62,139.32 L546.15,136.42 L548.16,136.37 L548.7,134.72 L546.78,133.34 L546.62,130.98 L544.73,131.08 L544.46,130.31 L543.35,129.2 L540.8,128.34 L536.64,127.66 L532.11,127.65 L528.26,126.38 L528.04,121.14 L524.43,117.31 L524.8,113.86 L524.18,110.07 L521.19,103.26 L519.73,101.18 L520.06,98.19 L521.24,93.53 L519.83,88.51 L517.62,86.39 L514.67,86.91 L512.67,85.11 L511.64,81.57 L511.58,79.38 L512.1,77.66 L513.83,75.33 L510.39,71.32 L505.12,67.94 L503.64,67.2 L503.97,65.11 L507.98,60.86 L508.34,58.92 L508.82,56.05 L506.93,55.09 L505.74,52.44 L502.19,50.57 L500.45,48.29 L499.24,46.86 L494.77,45.94 L492.34,45.07 L489.78,43.44 L484.56,40.96 L480.26,38.81 L478.89,37.68 L479.39,34.79 L479.46,31.98 L476.67,25.76 L472.01,22.22 L467.04,20.01 L441.06,35.21 L437.03,43.06 L419.56,41.1 L427.72,57.8 L402.07,85.75 L390.89,94.06 L369.3,73.61 L355.06,64.15 L332.55,85.69 L324.28,101.34 L310.63,98.74 L300.32,91.72 L296.5,84.72 L287.78,82.68 L285.33,85.57 L283.07,87.61 L278.24,85.74 L274.58,89.94 L274.66,94.46 L271.96,99.11 L270.49,103.48 L268.16,107.81 L259.38,108.05 L260.43,117.74 L255.04,121.72 L252.96,129.49 L252.3,136.5 L246.06,131.38 L239.76,131.72 L236.78,138.94 L238.65,143.17 L243.54,147.8 L243.07,167.13 L226.45,179.1 L214.41,192.71 L204.06,205.78 L187.91,222.58 L184.26,235.66 L183.05,252.46 L175.84,272.75 L148.1,290.53 L136.91,310.82 L129.75,295.13 L114.07,278.95 L98.39,303.47 L82.71,321.12 L89.88,336.32 L83.61,355.94 L68.83,368.2 L42.11,372.0 L26.76,370.16 Z"/>
+    <g id="input-markers"></g>
+  </svg>
+</div>
+
+<!-- HEADER -->
+<div id="hdr">
+  <div id="logo">
+    <div id="logo-dot"></div>
+    <div>
+      <div id="logo-text">AXIS</div>
+      <div id="logo-sub">LHR · LOGISTICS TERMINAL</div>
+    </div>
+  </div>
+  <div id="hdr-right">
+    <span id="clock">--:--:--</span><br>
+    31.5204°N · 74.3587°E
+  </div>
+</div>
+
+<!-- MAIN -->
+<div id="shell">
+  <div id="main-card">
+    <div class="card-top-line"></div>
+    <div class="card-hdr">
+      <div class="card-hdr-label">Route Intake · Step 1 of 2</div>
+      <div class="card-hdr-title">Add Delivery Stops</div>
+    </div>
+
+    <div class="card-body">
+      <div id="err-msg"></div>
+
+      <div class="input-group">
+        <input
+          class="stop-input" id="stop-input"
+          placeholder="Paste a Google Maps URL…"
+          autocomplete="off"
+        />
+        <span id="resolve-status"></span>
+        <button class="icon-btn" id="dl-toggle" title="Set deadline">⏱</button>
+        <button class="add-btn" id="add-btn" disabled title="Add stop">+</button>
+      </div>
+
+      <div id="resolve-preview">
+        <span class="rp-dot" id="rp-dot"></span>
+        <span class="rp-text" id="rp-text"></span>
+        <span class="rp-coords" id="rp-coords"></span>
+      </div>
+
+      <div class="deadline-row" id="deadline-row">
+        <span class="dl-label">Deadline</span>
+        <input type="time" class="dl-input" id="deadline-input" value="17:00"/>
+        <span class="dl-close" id="dl-close">✕</span>
+      </div>
+
+      <div id="stop-list">
+        <div class="empty-list" id="empty-state">
+          <span class="empty-icon">◎</span>
+          No stops yet — add stops above.<br>Paste a Google Maps link to begin.
+        </div>
+        <div id="tickets"></div>
+      </div>
+    </div>
+
+    <div class="card-footer">
+      <div class="stop-counter"><span id="stop-count">0</span> / 20 stops</div>
+      <div class="footer-actions">
+        <button class="btn-ghost" id="clear-btn">Clear all</button>
+        <button class="btn-proceed" id="proceed-btn" disabled>Optimize Route →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- OPTIMIZING OVERLAY -->
+<div id="optimizing-overlay">
+  <div class="opt-rings">
+    <div class="opt-ring opt-ring-1"></div>
+    <div class="opt-ring opt-ring-2"></div>
+    <div class="opt-ring opt-ring-3"></div>
+  </div>
+  <div class="opt-label">Running GA Pipeline</div>
+  <div class="opt-sub" id="opt-sub-label">initializing…</div>
+</div>
+
+<div id="exit-veil"></div>
+<div id="coord-bar">LAHORE DISTRICT · PKT UTC+5</div>
+
+<script>
+const SVG_W   = 640, SVG_H = 560, PAD = 20;
+const SVG_GEO = { minLon:74.00685, maxLon:74.65467, minLat:31.20059, maxLat:31.71342 };
+const COLORS  = ['#00d4ff','#a78bfa','#00e5a0','#f59e0b','#f43f5e','#38bdf8','#fb923c','#34d399'];
+const MAPS_URL_RE = /https?:\/\/(www\.)?(maps\.google\.com|google\.com\/maps|goo\.gl\/maps|maps\.app\.goo\.gl)/i;
+
+function validateInput(val) {
+  const v = val.trim();
+  if (!v) return { ok: false, hint: 'empty' };
+  if (v.startsWith('http') && !MAPS_URL_RE.test(v)) return { ok: false, hint: 'not-maps-url' };
+  return { ok: true };
+}
+
+let resolvedStops = [];
+let pendingData   = null;
+let dlVisible     = false;
+let _hintTimer    = null;
+
+const stopInput = document.getElementById('stop-input');
+
+function setResolveStatus(type, text) {
+  const el = document.getElementById('resolve-status');
+  el.textContent = text;
+  el.className = type ? `show ${type}` : '';
+}
+
+function setPreviewOk(resolved) {
+  const el = document.getElementById('resolve-preview');
+  document.getElementById('rp-dot').className   = 'rp-dot ok';
+  document.getElementById('rp-text').textContent = resolved.name || 'Resolved';
+  document.getElementById('rp-coords').textContent = `${resolved.lat.toFixed(4)}, ${resolved.lon.toFixed(4)} · Z${resolved.zone_id}`;
+  el.classList.remove('fail');
+  el.classList.add('show');
+}
+
+function setPreviewFail(reason) {
+  const el = document.getElementById('resolve-preview');
+  document.getElementById('rp-dot').className   = 'rp-dot fail';
+  document.getElementById('rp-text').textContent = reason || 'Could not resolve location';
+  document.getElementById('rp-coords').textContent = '';
+  el.classList.add('show','fail');
+}
+
+function clearPreview() {
+  document.getElementById('resolve-preview').classList.remove('show','fail');
+}
+
+function setAddEnabled(enabled) {
+  document.getElementById('add-btn').disabled = !enabled;
+}
+
+function showError(msg) {
+  const el = document.getElementById('err-msg');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+function showHint(msg) {
+  const el = document.getElementById('err-msg');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_hintTimer);
+  _hintTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+function geoToSvg(lon, lat) {
+  const x = PAD + (lon - SVG_GEO.minLon) / (SVG_GEO.maxLon - SVG_GEO.minLon) * (SVG_W - 2 * PAD);
+  const y = SVG_H - PAD - (lat - SVG_GEO.minLat) / (SVG_GEO.maxLat - SVG_GEO.minLat) * (SVG_H - 2 * PAD);
+  return [+x.toFixed(1), +y.toFixed(1)];
+}
+
+// clock
+(function tick() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('en-GB', { hour12: false, timeZone: 'Asia/Karachi' });
+  setTimeout(tick, 1000);
+})();
+
+// deadline toggle
+document.getElementById('dl-toggle').addEventListener('click', () => {
+  dlVisible = !dlVisible;
+  document.getElementById('deadline-row').classList.toggle('show', dlVisible);
+  document.getElementById('dl-toggle').classList.toggle('active', dlVisible);
+});
+document.getElementById('dl-close').addEventListener('click', () => {
+  dlVisible = false;
+  document.getElementById('deadline-row').classList.remove('show');
+  document.getElementById('dl-toggle').classList.remove('active');
+});
+
+// input events
+stopInput.addEventListener('input', () => {
+  const val = stopInput.value;
+  if (!val.trim()) {
+    pendingData = null;
+    stopInput.classList.remove('resolved-ok','resolving','error');
+    clearPreview();
+    setAddEnabled(false);
+    return;
+  }
+  if (pendingData) {
+    pendingData = null;
+    stopInput.classList.remove('resolved-ok');
+    clearPreview();
+    setAddEnabled(false);
+  }
+  const { ok, hint } = validateInput(val);
+  if (!ok) {
+    stopInput.classList.add('error');
+    stopInput.classList.remove('resolved-ok','resolving');
+    if (hint === 'not-maps-url') showHint('Paste a Google Maps URL');
+  } else {
+    stopInput.classList.remove('error');
+  }
+});
+
+stopInput.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  if (pendingData) { commitStop(); return; }
+  triggerResolve();
+});
+
+function triggerResolve() {
+  const query = stopInput.value.trim();
+  const { ok, hint } = validateInput(query);
+  if (!ok) {
+    stopInput.classList.add('error');
+    if (hint === 'empty')        showError('Enter a Google Maps URL.');
+    if (hint === 'not-maps-url') showError('Looks like a URL but not a Google Maps link.');
+    return;
+  }
+  stopInput.classList.remove('error','resolved-ok');
+  stopInput.classList.add('resolving');
+  setResolveStatus('pending', '…');
+  clearPreview();
+  setAddEnabled(false);
+  resolveStop(query);
+}
+
+async function resolveStop(query) {
+  try {
+    const res = await fetch('/api/resolve-stop', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (stopInput.value.trim() !== query) return;
+    if (data.valid) {
+      stopInput.classList.remove('resolving','error');
+      stopInput.classList.add('resolved-ok');
+      pendingData = data;
+      setResolveStatus('ok', '✓');
+      setPreviewOk(data);
+      setAddEnabled(true);
+    } else {
+      stopInput.classList.remove('resolving','resolved-ok');
+      pendingData = null;
+      setResolveStatus('fail', '✗');
+      setPreviewFail(data.reason || 'Location invalid');
+      setAddEnabled(false);
+    }
+  } catch (err) {
+    if (stopInput.value.trim() !== query) return;
+    stopInput.classList.remove('resolving','resolved-ok');
+    pendingData = null;
+    setResolveStatus('fail', '✗');
+    setPreviewFail('Network error — check server');
+    setAddEnabled(false);
+    console.error('resolve-stop:', err);
+  }
+}
+
+document.getElementById('add-btn').addEventListener('click', commitStop);
+
+function commitStop() {
+  if (resolvedStops.length >= 20) { showError('Maximum 20 stops reached.'); return; }
+  if (!pendingData)                { showError('Wait for location to resolve.'); return; }
+
+  const r  = pendingData;
+  const dl = dlVisible ? document.getElementById('deadline-input').value : null;
+
+  let displayName = r.name || stopInput.value.trim();
+  displayName = displayName.length > 28 ? displayName.slice(0, 26) + '…' : displayName;
+
+  const stop = {
+    id: Date.now(),
+    name: displayName,
+    lat: r.lat, lon: r.lon,
+    zone_id: r.zone_id,
+    deadline: dl,
+  };
+
+  resolvedStops.push(stop);
+
+  stopInput.value = '';
+  stopInput.classList.remove('resolved-ok','resolving','error');
+  pendingData = null;
+  clearPreview();
+  setResolveStatus(null, '');
+  setAddEnabled(false);
+
+  if (dlVisible) {
+    dlVisible = false;
+    document.getElementById('deadline-row').classList.remove('show');
+    document.getElementById('dl-toggle').classList.remove('active');
+  }
+
+  document.getElementById('empty-state').style.display = 'none';
+  renderTickets();
+  placeMarker(stop, resolvedStops.length);
+  updateUI();
+  document.getElementById('fill-path').classList.add('awake');
+}
+
+function removeStop(id) {
+  resolvedStops = resolvedStops.filter(s => s.id !== id);
+  renderTickets();
+  redrawMarkers();
+  updateUI();
+  if (!resolvedStops.length) {
+    document.getElementById('empty-state').style.display = 'block';
+    document.getElementById('fill-path').classList.remove('awake');
+  }
+}
+
+function renderTickets() {
+  document.getElementById('tickets').innerHTML = resolvedStops.map((s, i) => `
+    <div class="ticket" id="tk-${s.id}">
+      <div class="t-num" style="background:${COLORS[i % COLORS.length]}">${i + 1}</div>
+      <div class="t-body">
+        <div class="t-name">${s.name}</div>
+        <div class="t-meta">
+          <span class="badge bz">Zone ${s.zone_id}</span>
+          ${s.deadline ? `<span class="badge bd">⏱ ${s.deadline}</span>` : ''}
+          <span class="badge bc">${s.lat.toFixed(4)}, ${s.lon.toFixed(4)}</span>
+        </div>
+      </div>
+      <button class="t-rm" onclick="removeStop(${s.id})">×</button>
+    </div>`).join('');
+}
+
+function placeMarker(s, idx) {
+  const [sx, sy] = geoToSvg(s.lon, s.lat);
+  const c = COLORS[(idx - 1) % COLORS.length];
+  const el = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  el.id = 'mk-' + s.id;
+  el.innerHTML = `
+    <circle cx="${sx}" cy="${sy}" r="9" fill="${c}" opacity=".15"/>
+    <circle cx="${sx}" cy="${sy}" r="5" fill="${c}"/>
+    <circle cx="${sx}" cy="${sy}" r="2" fill="rgba(8,10,15,.85)"/>
+    <text x="${sx+8}" y="${sy+4}" font-family="IBM Plex Mono,monospace" font-size="8" fill="${c}" font-weight="600">${idx}</text>`;
+  document.getElementById('input-markers').appendChild(el);
+}
+
+function redrawMarkers() {
+  document.getElementById('input-markers').innerHTML = '';
+  resolvedStops.forEach((s, i) => placeMarker(s, i + 1));
+}
+
+function updateUI() {
+  document.getElementById('stop-count').textContent = resolvedStops.length;
+  document.getElementById('proceed-btn').disabled   = resolvedStops.length < 2;
+}
+
+document.getElementById('clear-btn').addEventListener('click', () => {
+  resolvedStops = [];
+  pendingData   = null;
+  document.getElementById('input-markers').innerHTML    = '';
+  document.getElementById('tickets').innerHTML          = '';
+  document.getElementById('empty-state').style.display = 'block';
+  document.getElementById('fill-path').classList.remove('awake');
+  stopInput.value = '';
+  stopInput.classList.remove('resolved-ok','resolving','error');
+  clearPreview();
+  setResolveStatus(null, '');
+  setAddEnabled(false);
+  updateUI();
+});
+
+const OPT_STEPS = [
+  'building cost table…',
+  'running ML congestion model…',
+  'executing genetic algorithm…',
+  'scoring top 3 routes…',
+  'verifying with Google Maps…',
+];
+
+document.getElementById('proceed-btn').addEventListener('click', proceedToOptimization);
+
+async function proceedToOptimization() {
+  if (resolvedStops.length < 2) { showError('Add at least 2 stops to optimize.'); return; }
+
+  const overlay  = document.getElementById('optimizing-overlay');
+  const subLabel = document.getElementById('opt-sub-label');
+  overlay.classList.add('show');
+
+  let stepIdx = 0;
+  subLabel.textContent = OPT_STEPS[0];
+  const stepTimer = setInterval(() => {
+    stepIdx = (stepIdx + 1) % OPT_STEPS.length;
+    subLabel.textContent = OPT_STEPS[stepIdx];
+  }, 900);
+
+  const payload = {
+    stops: resolvedStops.map(s => ({
+      name: s.name, lat: s.lat, lon: s.lon,
+      zone_id: s.zone_id, deadline: s.deadline || null,
+    })),
+  };
+
+  try {
+    const res = await fetch('/api/optimize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    clearInterval(stepTimer);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+    const optimizeResponse = await res.json();
+    sessionStorage.setItem('optimizeResponse', JSON.stringify(optimizeResponse));
+    sessionStorage.setItem('resolvedStops',    JSON.stringify(resolvedStops));
+    overlay.classList.remove('show');
+    const veil = document.getElementById('exit-veil');
+    veil.classList.add('show');
+    setTimeout(() => { window.location.href = '/results'; }, 580);
+  } catch (err) {
+    clearInterval(stepTimer);
+    overlay.classList.remove('show');
+    showError(`Optimize failed: ${err.message}`);
+    console.error('optimize:', err);
+  }
+}
+
+updateUI();
+</script>
+</body>
+</html>
